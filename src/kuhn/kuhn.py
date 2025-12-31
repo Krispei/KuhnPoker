@@ -18,8 +18,8 @@ class KuhnPoker:
 
   def getPlayerToAct(self, history):
 
-    if len(history) == 0 or len(history) == 2 : return 1
-    if len(history) == 1: return 2
+    if len(history) == 0 or len(history) == 2 : return 0
+    if len(history) == 1: return 1
 
   def getPayouts(self, history, cards): 
 

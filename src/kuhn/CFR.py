@@ -1,6 +1,7 @@
 from .kuhn import KuhnPoker
 from .nodes import Node
 import random
+import time
 
 class CFR_agent:
 
@@ -13,12 +14,25 @@ class CFR_agent:
         self.cards = []
 
     def train(self):
-
-        for _ in range(self.iterations):
         
+        print(f"Beginning CFR training with {self.iterations} iterations...")
+
+        start = time.time()
+
+        for i in range(self.iterations):
+            
+            if i % 1000 == 0:
+                print(f"At iteraion {i}")
+
             self.cards = random.sample(self.game.cards, 2)
             
             self.CFR("", 1, 1)
+
+        end = time.time()
+
+        duration = (end-start) / 60
+
+        print(f"Training complete in {duration} minutes!")
 
     def CFR(self, history, pi_i, pi_i_c):
 
@@ -26,15 +40,16 @@ class CFR_agent:
             
             return self.game.getPayouts(history, self.cards)
         
-        player_to_act = self.game.getPlayerToAct
+        player_to_act = self.game.getPlayerToAct(history)
 
-        infostate = str(player_to_act) + self.cards[player_to_act] + history
+
+        infostate = str(player_to_act) + str(self.cards[player_to_act]) + history
         # example, player 1 with a king to act after checking and player 2 betting:
         # 02pb
 
-        if infostate not in self.infostate_map.keys:
+        if infostate not in self.infostate_map:
 
-            self.infostate_map[infostate] = Node()
+            self.infostate_map[infostate] = Node(['p', 'b'])
 
 
         actions = self.game.getActions()
@@ -44,67 +59,65 @@ class CFR_agent:
         #strategy normalization constant
 
         #Calculate strategy normalization constant
-        for action in actions:
+        for i, action in enumerate(actions):
 
             #Calculate the normalization constant 
             #sum of R+(I,a)
             
-            R_I_a = self.infostate_map[infostate].regret_sum[action]
+            R_I_a = self.infostate_map[infostate].regret_sum[i]
 
             regret_sum_sum += max(R_I_a, 0)
              
         if regret_sum_sum > 0:
 
             #Calculate probability of taking action a
-            for action in actions:
+            for i, action in enumerate(actions):
                 
                 #calculate sig(I,a):
-                R_I_a = self.infostate_map[infostate].regret_sum[action]
+                R_I_a = self.infostate_map[infostate].regret_sum[i]
 
                 R_plus_I_a = max(R_I_a, 0)
 
-                self.infostate_map[infostate].strategy[action] = R_plus_I_a / regret_sum_sum
+                self.infostate_map[infostate].strategy[i] = R_plus_I_a / regret_sum_sum
 
         else:
 
-            for action in actions:
+            for i, action in enumerate(actions):
 
-                self.infostate_map[infostate].strategy[action] = 1 / len(actions)
+                self.infostate_map[infostate].strategy[i] = 1 / len(actions)
 
         #calculate node value: essentially current expected value with current strategy
         #v_sig_I
         node_expected_value = 0
 
-        for action in self.game.getActions():
+        for i, action in enumerate(actions):
             
-            strategy_a = self.infostate_map[infostate].strategy(action)
+            strategy_a = self.infostate_map[infostate].strategy[i]
 
             if player_to_act == 0: 
 
-                value_a = self.CFR(history + action, pi_i * strategy_a, pi_i_c)
+                value_a = -self.CFR(history + action, pi_i * strategy_a, pi_i_c)
 
             else:
 
-                value_a = self.CFR(history + action, pi_i, pi_i_c * strategy_a)
+                value_a = -self.CFR(history + action, pi_i, pi_i_c * strategy_a)
 
 
-            self.infostate_map[infostate].value[action] = value_a
+            self.infostate_map[infostate].value[i] = value_a
 
             node_expected_value += strategy_a * value_a 
 
         #now reassign the regrets
-        for action in self.game.getActions():
+        for i, action in enumerate(actions):
 
             #compare v(I,a) against v_sig_i
 
-            value_a = self.infostate_map[infostate].value[action]
-            strategy_a = self.infostate_map[infostate].strategy[action]
+            value_a = self.infostate_map[infostate].value[i]
+            strategy_a = self.infostate_map[infostate].strategy[i]
 
 
             #r(I,a) = v(I,a) - v_sig_i
-            regret_a = value_a - node_expected_value
-
-            regret_a = max(regret_a, 0)
+            instantaneous_regret_a = value_a - node_expected_value
 
             #if v(I,a) > v_sig_i, we have positive regret and we regret not chosing a more often
 
@@ -113,43 +126,43 @@ class CFR_agent:
 
             pi_c = pi_i_c if player_to_act == 0 else pi_i
 
-            self.infostate_map[infostate].regret[action] += pi_c * regret_a
+            self.infostate_map[infostate].regret_sum[i] += pi_c * instantaneous_regret_a
 
             #update strategy sum
             #sig(a) = sig(a) + (pi_i * sig(a))
 
             pi = pi_i if player_to_act == 0 else pi_i_c
 
-            self.infostate_map[infostate].strategy_sum[action] += strategy_a * pi
+            self.infostate_map[infostate].strategy_sum[i] += strategy_a * pi
 
         return node_expected_value
 
     def calculate_final_strategy(self):
 
-        for infostate in self.infostate_map.keys:
+        for infostate in self.infostate_map:
             
             actions = self.infostate_map[infostate].actions
 
             #normalization constnat for final strategies
             final_strategy_sum = 0
 
-            for action in actions:
+            for i, action in enumerate(actions):
 
-                final_strategy_sum += self.infostate_map[infostate].strategy_sum[action] 
+                final_strategy_sum += self.infostate_map[infostate].strategy_sum[i] 
 
             if final_strategy_sum > 0:
 
-                for action in actions:
+                for i, action in enumerate(actions):
 
-                    strategy_sum_a = self.infostate_map[infostate].strategy_sum[action] 
+                    strategy_sum_a = self.infostate_map[infostate].strategy_sum[i] 
 
-                    self.infostate_map[infostate].final_strategy[action] = strategy_sum_a / final_strategy_sum
+                    self.infostate_map[infostate].final_strategy[i] = strategy_sum_a / final_strategy_sum
             
             else:
 
-                for action in actions:
+                for i, action in enumerate(actions):
 
-                    self.infostate_map[infostate].final_strategy[action] = 1 / len(actions)
+                    self.infostate_map[infostate].final_strategy[i] = 1 / len(actions)
 
         
                     
