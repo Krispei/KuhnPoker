@@ -23,6 +23,13 @@ class CFR_agent:
 
 
     def plot_p2_strategy(self, data):
+        '''
+        helper function to plot P2 open jack strategy
+        
+        :param self: 
+        :param data: [ [pass probabiliy], [bet probability] ] For player 2 JACK after a player 1 PASS. 
+            The reason for this strategy specifically is because there is only one equilibrium state for player 2 
+        '''
 
         plt.plot(data[0], label="Jack pass probability")
         plt.plot(data[1], label="Jack bet probability")    
@@ -33,8 +40,17 @@ class CFR_agent:
         plt.show()
 
     def plot_exploitability_func(self, data):
+        '''
+        Helper function to plot exploitabilility of the current final strategy over iterations.
+    
+        :param self:
+        :param data: exploitability calculated every 50 iterations
+        '''
 
-        plt.plot(data, label="Exploitability")
+        step = 50
+        x = [i * step for i in range(len(data))]
+
+        plt.plot(x, data)
         plt.xlabel("Iterations")
         plt.ylabel("Exploitability")
         plt.title("Exploitability over iterations")
@@ -73,8 +89,8 @@ class CFR_agent:
                 self.p2_J_root_strategy[0].append(p2_J_p)
                 self.p2_J_root_strategy[1].append(p2_J_b)
             
-            #calculate exploitability
-            if (self.plot_exploitability & (i % 100 == 0)):
+            #calculate exploitability every 50 iterations
+            if (self.plot_exploitability & (i % 50 == 0)):
 
                 self.exploitability.append(self.calculate_exploitability())
 
@@ -93,9 +109,9 @@ class CFR_agent:
             self.plot_exploitability_func(self.exploitability)
 
     def CFR(self, history, pi_i, pi_i_c):
-
+        
         #Visiting a terminal node
-        if self.game.isGameFinished(history):
+        if self.game.game_finished(history):
             
             payout = self.game.getPayouts(history, self.cards)
 
@@ -212,22 +228,25 @@ class CFR_agent:
     #Recursive function to calculate expected utility
     def expected_utility(self, history, pi_i, pi_i_c):  
         
-        if self.game.isGameFinished(history):
+        player = self.game.getPlayerToAct(history=history)
 
-            sign = 1 if self.game.getPlayerToAct(history) == 0 else -1
-        
-            return sign * self.game.getPayouts(history, self.cards) 
+        if self.game.game_finished(history):
+
+            payout = self.game.getPayouts(history, self.cards)
+
+            if player == 0:
+
+                return payout
+            
+            else:
+
+                return -payout
 
         #expected utility = P(b) * v(I,b) + P(p) * v(I,p)
-
-        player = self.game.getPlayerToAct(history)
-
         card = self.cards[player]
-
         infostate = str(player) + str(card) + history
 
         p_p = self.infostate_map[infostate].final_strategy[0]
-
         p_b = self.infostate_map[infostate].final_strategy[1]
 
         if player == 0:
@@ -248,30 +267,26 @@ class CFR_agent:
 
     def calculate_expected_utility(self):
 
-        all_root_states = [[0,1], [0,2],
-                           [1,0], [1,2],
-                           [2,0], [2,1]]
-
         p1_expected_utility = 0
-        p2_expected_utility = 0
         
-        for root in all_root_states:
+        for p1_card in self.game.cards:
+            for p2_card in self.game.cards:
+                
+                if p2_card == p1_card: continue
 
-            self.cards = root
+                self.cards = [p1_card, p2_card]
 
-            self.expected_utility("", 1, 1)
+                self.expected_utility("", 1, 1)
 
-            p1_root = "0" + str(root[0])
-            p2_root = "1" + str(root[1])
+                p1_root = "0" + str(self.cards[0])
 
-            p1_expected_utility += (1/len(all_root_states)) * self.utility_map[p1_root]
-            #p2_expected_utility += (1/len(all_root_states)) * self.expected_utility[p2_root]
+                p1_expected_utility += (1/6) * self.utility_map[p1_root]
 
         return p1_expected_utility
-    
+
     def get_br_value(self, history, hero_card, opp, p_card):
         # 1. Terminal Node
-        if self.game.isGameFinished(history=history):
+        if self.game.game_finished(history=history):
             # Determine payoff for P0
             if opp == 0: # Hero is P1
                 # Opponent is P0, Hero is P1. 

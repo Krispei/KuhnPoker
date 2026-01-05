@@ -8,7 +8,7 @@ class KuhnPoker:
 
     self.terminal_states = ['bb', 'pp', 'pbb', 'bp', 'pbp']
 
-  def isGameFinished(self, history):
+  def game_finished(self, history):
 
     if history in self.terminal_states: return True
 
@@ -23,7 +23,7 @@ class KuhnPoker:
 
   def getPayouts(self, history, cards): 
 
-    if self.isGameFinished(history):
+    if self.game_finished(history):
 
       # Uncontested cases
       if history == 'bp': return 1

@@ -4,7 +4,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "../../src"))
 
 from kuhn.CFR import CFR_agent
 
-ITERATIONS = 2500 #Iterations used in training
+ITERATIONS = 25000 #Iterations used in training
 PLOT_STRATEGY = False #Plot the final (best) strategy over iterations
 PLOT_EXPLOITABILITY = True
 
@@ -32,6 +32,12 @@ def print_EV(agent):
     print(f"Player 1 expected value : {round(p1_ev,4)}")
     print(f"Player 2 expected value : {round(p2_ev,4)}")
 
+def print_exploitability(agent):
+
+    final_exploitability = agent.exploitability[-1]
+
+    print(f"Strategy profile exploitability : {round(final_exploitability, 3)}")
+
 def main():
     
     # Initializing Kuhn Poker CFR agent
@@ -58,7 +64,8 @@ def main():
    
     print("-----------  GENERAL STATISTICS -----------")
     print_EV(agent)
-    print(agent.exploitability[-1])
+    if PLOT_EXPLOITABILITY:
+        print_exploitability(agent)
 
     print("----------- PLAYER 1 STRATEGIES -----------")
     p1_infostates.sort()
