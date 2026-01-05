@@ -25,7 +25,6 @@ class KuhnPoker:
 
     if self.isGameFinished(history):
 
-      
       # Uncontested cases
       if history == 'bp': return 1
       if history == 'pbp': return -1
@@ -33,7 +32,11 @@ class KuhnPoker:
       #showdown cases
       p1_card = cards[0]
       p2_card = cards[1]
+      
+      # Tie cases (should never happen in a real game)
+      if p1_card == p2_card: return 0
 
+      # Win cases
       if history == 'pp' : return 1 if p1_card > p2_card else -1
       if history == 'bb' or history == 'pbb' : return 2 if p1_card > p2_card else -2
 

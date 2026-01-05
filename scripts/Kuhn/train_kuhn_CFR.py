@@ -4,7 +4,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "../../src"))
 
 from kuhn.CFR import CFR_agent
 
-ITERATIONS = 25000 #Iterations used in training
+ITERATIONS = 2500 #Iterations used in training
 PLOT_STRATEGY = False #Plot the final (best) strategy over iterations
 PLOT_EXPLOITABILITY = True
 
@@ -58,7 +58,7 @@ def main():
    
     print("-----------  GENERAL STATISTICS -----------")
     print_EV(agent)
-
+    print(agent.exploitability[-1])
 
     print("----------- PLAYER 1 STRATEGIES -----------")
     p1_infostates.sort()

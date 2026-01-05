@@ -269,112 +269,85 @@ class CFR_agent:
 
         return p1_expected_utility
     
-    def get_br_value(self, history, player_cards, prob_opp_cards):
-        """
-        Recursive helper to calculate the value of the Best Response.
-        
-        Args:
-            history: string game history
-            player_cards: tuple (p0_card, p1_card)
-                          Note: One is the fixed 'exploiter' card, 
-                          the other is a placeholder or used for payout index.
-            prob_opp_cards: list of probabilities of the opponent holding cards 0, 1, 2.
-                            (The probability for the exploiter's own card will be 0)
-        """
-         
+    def get_br_value(self, history, hero_card, opp, p_card):
         # 1. Terminal Node
-        if self.game.isGameFinished(history):
-            # Calculate Expected Payoff over the distribution of opponent cards
-            expected_payoff = 0
-            exploiter = 0 if self.game.getPlayerToAct(history) == 1 else 1 # Previous player acted
-            exploiter_card = player_cards[exploiter]
-            
-            # Iterate over all possible opponent cards
-            for opp_card in range(3):
-                if prob_opp_cards[opp_card] > 0:
-                    # Construct the specific deal to get the payout
-                    current_cards = [0, 0]
-                    current_cards[exploiter] = exploiter_card
-                    current_cards[1-exploiter] = opp_card
-                    
-                    payout = self.game.getPayouts(history, current_cards)
-                    
-                    # Payouts are always defined for P0. 
-                    # If exploiter is P1, we flip sign.
-                    if exploiter == 1:
-                        payout = -payout
-                        
-                    expected_payoff += prob_opp_cards[opp_card] * payout
-            
-            return expected_payoff
+        if self.game.isGameFinished(history=history):
+            # Determine payoff for P0
+            if opp == 0: # Hero is P1
+                # Opponent is P0, Hero is P1. 
+                card_combos = [[0, hero_card], [1, hero_card], [2, hero_card]]
+            else: # Hero is P0
+                card_combos = [[hero_card, 0], [hero_card, 1], [hero_card, 2]]
 
-        player_to_act = self.game.getPlayerToAct(history)
-        
-        # 2. Chance Node (Strategy Node for the Fixed Opponent)
-        # We split the execution paths and update opponent card probabilities
-        if player_to_act != player_cards[3]: # player_cards[3] stores who is the Exploiter
-            
-            value_accum = 0
-            
-            # We need to recurse on both actions (p and b), but the probability 
-            # of the opponent being here depends on their card and strategy.
-            
-            # Prepare probability distributions for next states
-            prob_pass = [0.0] * 3
-            prob_bet = [0.0] * 3
-            
-            for card in range(3):
-                if prob_opp_cards[card] > 0:
-                    # Retrieve Fixed Opponent's Strategy for this card + history
-                    infostate = str(player_to_act) + str(card) + history
-                    if infostate in self.infostate_map:
-                        strat = self.infostate_map[infostate].final_strategy
-                    else:
-                        strat = [0.5, 0.5] # Default uniform
-                    
-                    prob_pass[card] = prob_opp_cards[card] * strat[0]
-                    prob_bet[card]  = prob_opp_cards[card] * strat[1]
-            
-            # Recurse and sum up the weighted values
-            # Note: We don't multiply by strategy here because the probability 
-            # mass was pushed into the prob_pass/prob_bet arrays.
-            value_accum += self.get_br_value(history + 'p', player_cards, prob_pass)
-            value_accum += self.get_br_value(history + 'b', player_cards, prob_bet)
-            
-            return value_accum
+            payout_J = self.game.getPayouts(history, card_combos[0])
+            payout_Q = self.game.getPayouts(history, card_combos[1])
+            payout_K = self.game.getPayouts(history, card_combos[2])
 
-        # 3. Decision Node (Choice for the Best Responder)
+            # Expected Value = Sum(Payoff * Probability)
+            # Note: p_card should be normalized (sum to 1) for this to be an average
+            expected_payout = (payout_J * p_card[0]) + (payout_Q * p_card[1]) + (payout_K * p_card[2])
+
+            # If Hero is P0, we want positive P0 payout. 
+            # If Hero is P1, we want negative P0 payout (assuming zero-sum).
+            if opp == 1: # Hero is P0
+                return expected_payout
+            else:        # Hero is P1
+                return -expected_payout
+
+        # Get active player
+        player = self.game.getPlayerToAct(history=history)
+        action_map = ['p', 'b']
+
+        # 2. Opponent Node (Chance Node from Hero's perspective)
+        if player == opp:
+            ev = 0
+            for action in [0, 1]: # 0=p, 1=b
+                norm = 0
+                # Calculate probability of opponent taking this action
+                for card in [0, 1, 2]:
+
+                    infostate = str(player) + str(card) + history
+
+                    p_a_given_card = self.infostate_map[infostate].final_strategy[action] if infostate in self.infostate_map else 0.5
+
+                    norm += p_a_given_card * p_card[card]
+
+                # Skip impossible branches to avoid Div/0
+                if norm == 0:
+                    continue
+
+                # Update opponent beliefs (Bayes)
+                new_card_probabilities = [0, 0, 0]
+                for card in [0, 1, 2]:
+
+                    infostate = str(player) + str(card) + history
+
+                    p_a_given_card = self.infostate_map[infostate].final_strategy[action] if infostate in self.infostate_map else 0.5
+
+                    new_card_probabilities[card] = (p_a_given_card * p_card[card]) / norm
+                
+                ev += norm * self.get_br_value(history + action_map[action], hero_card, opp, new_card_probabilities)
+            return ev
+
+        # 3. Hero Node (Optimization Node)
         else:
-            # The Exploiter sees their own card (player_cards[exploiter]) and history.
-            # They choose the action that maximizes EV against the current prob_opp_cards.
-            
-            # We pass the current probability distribution down unchanged
-            val_pass = self.get_br_value(history + 'p', player_cards, prob_opp_cards)
-            val_bet  = self.get_br_value(history + 'b', player_cards, prob_opp_cards)
-            
-            return max(val_pass, val_bet)
-
+            ev_p = self.get_br_value(history + 'p', hero_card, opp, p_card)
+            ev_b = self.get_br_value(history + 'b', hero_card, opp, p_card)
+            return max(ev_p, ev_b)
 
     def calculate_exploitability(self):
-        # Calculate Best Response Value for P0 (Exploiting Fixed P1)
-        br_val_p0 = 0
-        for card in range(3):
-            # P0 has 'card', P1 has others. 
-            # We pass a tuple where index 3 indicates WHO is the exploiter (0)
-            # Tuple: (P0_Card, P1_Placeholder, Unused, Exploiter_ID)
-            prob_opp = [1.0 if c != card else 0.0 for c in range(3)]
-            br_val_p0 += self.get_br_value("", (card, -1, -1, 0), prob_opp)
+        cards = [0, 1, 2]
+        p1_ev_br = 0
+        p2_ev_br = 0
 
-        # Calculate Best Response Value for P1 (Exploiting Fixed P0)
-        br_val_p1 = 0
-        for card in range(3):
-            prob_opp = [1.0 if c != card else 0.0 for c in range(3)]
-            br_val_p1 += self.get_br_value("", (-1, card, -1, 1), prob_opp)
+        for card in cards:
+            # PROBABILITY FIX: Use 0.5 so probabilities sum to 1.0
+            # This represents that given Hero has Card X, Opponent has Y or Z with 50% prob each.
+            p_cards = [0.5, 0.5, 0.5] 
+            p_cards[card] = 0
 
-        # Average over the 6 possible deals (each card loop does 3, total 6)
-        # However, our probability injection was 1.0 per card. 
-        # Total combinations = 6. 
-        # br_val_p0 sums up 3 scenarios (P0=J, P0=Q, P0=K). Each scenario implicitly sums over 2 opponent cards.
-        # So we just divide by 6.
-        
-        return (br_val_p0 + br_val_p1) / 6 / 2 # The extra /2 is for NashConv -> Exploitability
+            # We multiply by 1/3 because each Hero card occurs with 1/3 probability
+            p1_ev_br += self.get_br_value('', card, 1, p_cards) * (1/3)
+            p2_ev_br += self.get_br_value('', card, 0, p_cards) * (1/3)
+
+        return (p1_ev_br + p2_ev_br)
