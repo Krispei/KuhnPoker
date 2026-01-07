@@ -264,7 +264,6 @@
     <h1>Kuhn Poker</h1>
     
     <div class="stats">
-        <span>Bankroll: <strong id="bankroll">0</strong></span>
         <span>Hands: <strong id="hands-played">0</strong></span>
     </div>
 
@@ -360,7 +359,6 @@
             pot: 0,
             history: "", 
             isUserP1: true, 
-            userBankroll: 0,
             handsPlayed: 0,
             gameOver: true
         };
@@ -535,7 +533,6 @@
             const userWon = state.isUserP1 ? (payoff > 0) : (payoff < 0);
             const amount = Math.abs(payoff);
 
-            state.userBankroll += userWon ? amount : -amount;
             state.handsPlayed++;
 
             const resultText = userWon ? `You Won ${amount}!` : `You Lost ${amount}.`;
@@ -550,7 +547,6 @@
             try {
                 // 1. Basic Stats
                 document.getElementById('pot').innerText = calculatePot(state.history);
-                document.getElementById('bankroll').innerText = state.userBankroll;
                 document.getElementById('hands-played').innerText = state.handsPlayed;
                 
                 const btnPass = document.getElementById('btn-pass');
