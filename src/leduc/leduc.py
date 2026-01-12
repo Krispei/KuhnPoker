@@ -45,21 +45,23 @@ class leduc():
 
     def r1_over(self, history):
         '''
-        Returns whether or not the game is ready to move on to round 2 / on round 2
-        
+        Returns whether or not the game is ready to move on to round 2
+
         :param self: Self
         :param history: string history
-        :return: True for if the game is ready to move onto round 2 / on round 2, False otherwise
+        :return: True for if the game is ready to move onto round 2 / False otherwise
         :rtype: Boolean
         '''
         if ':' in history:
-            return True
+            return False
         
         if history[-1] == 'c':
             return True
         
         if history[-2:] == 'pp':
             return True
+        
+        return False
         
     def get_round(self, history):
         '''
@@ -209,6 +211,10 @@ class leduc():
 
             return ['p', 'r']
         
+        if history[-1] == ':':
+
+            return ['p', 'r']
+
         if history[-1] == 'p':
             
             return ['p', 'r']

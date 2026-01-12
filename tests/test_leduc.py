@@ -73,3 +73,16 @@ def test_winner():
     for cards in ties:
         
         assert agent.payout(history, cards) == 0
+
+def test_actions():
+
+    agent = leduc()
+
+    history_map = {'p' : ['p','r'],
+                   'pr': ['f','c','r'],
+                   'prr': ['f','c'],
+                   'prrc:': ['p', 'r']}
+    
+    for history in history_map:
+        print(history)
+        assert agent.actions(history) == history_map[history]

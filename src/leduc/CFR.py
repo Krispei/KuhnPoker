@@ -1,4 +1,4 @@
-from .kuhn import KuhnPoker
+from .leduc import leduc
 from .nodes import Node
 import matplotlib.pyplot as plt
 import random
@@ -9,7 +9,7 @@ class CFR_agent:
 
     def __init__(self, iterations, plot_strategy_sum, plot_exploitability):
 
-        self.game = KuhnPoker()
+        self.game = leduc()
         self.iterations = iterations
         self.plot_strategy_sum = plot_strategy_sum
         self.plot_exploitability = plot_exploitability
@@ -17,6 +17,7 @@ class CFR_agent:
         self.infostate_map = dict()
         self.utility_map = dict()
         
+        self.deck = [0,0,1,1,2,2]
         self.cards = []
         self.exploitability = []
 
@@ -53,50 +54,58 @@ class CFR_agent:
                 print(f"Training {(i // ten_percent)*10}% Done at iteration {i}")
 
             #Each game requires new cards shuffle
-            self.cards = random.sample(self.game.cards, 2)
+            random.shuffle(self.deck)
             
+            self.cards = [self.deck[0], self.deck[1]]
+
             #One traversal of the game tree
-            self.CFR("", 1, 1)
+            self.CFR("", 1, 1, 1)
             
-            self.calculate_final_strategy()
-
-            #calculate exploitability every 50 iterations
-            if (self.plot_exploitability & (i % exploitability_sample == 0)):
-
-                self.exploitability.append(self.calculate_exploitability())
-
         end = time.time()
 
         duration = round((end-start),2)
 
         print(f"Training complete in {duration} seconds!")
     
-        if (self.plot_exploitability):
 
-            self.plot_exploitability_func(self.exploitability)
-
-
-    def CFR(self, history, pi_i, pi_i_c):
+    def CFR(self, history, pi_i, pi_i_c, pi_c):
         
         #Visiting a terminal node
-        if self.game.game_finished(history):
+        if self.game.terminal(history):
             
-            payout = self.game.getPayouts(history, self.cards)
+            payout = self.game.payouts(history, self.cards)
 
             if self.game.player_to_act(history) == 0:
                 return payout
             else:
                 return -payout
 
+        #Visiting a chance node
+        if self.game.r1_over(history):
+            
+            cf_value = 0
 
-        player_to_act = self.game.getPlayerToAct(history)
-        #infostates are as following: player to act, player to act's cards, history
-        infostate = str(player_to_act) + str(self.cards[player_to_act]) + history
+            for i in range(2, len(self.deck)):
+                
+                self.cards.append(self.deck[i])
+                cf_value += (1/4) * self.CFR(history=history + ":", pi_i=pi_i, pi_i_c=pi_i_c, pi_c= pi_c*(1/4))
+
+            return cf_value
+
+        player_to_act = self.game.player_to_act(history)
+
+        #infostate must contain the new card once the second round starts
+        public_card = ""
+        if len(self.cards) > 2: 
+
+            public_card == self.cards[2]
+
+        infostate = str(player_to_act) + str(self.cards[player_to_act]) + str(public_card) + history
 
         if infostate not in self.infostate_map:
-            self.infostate_map[infostate] = Node(['p', 'b'])
+            self.infostate_map[infostate] = Node(self.game.actions(history=history))
             
-        actions = self.game.getActions()
+        actions = self.game.actions(history=history)
 
         #strategy normalization constant
         regret_sum_sum = 0
@@ -105,7 +114,7 @@ class CFR_agent:
         for i, action in enumerate(actions):
             #Calculate the normalization constant 
             #sum of R+(I,a)
-            R_I_a = self.infostate_map[infostate].regret_sum[i]
+            R_I_a = self.infostate_map[infostate].regret_sum.get(action, 0)
 
             regret_sum_sum += max(R_I_a, 0)
              
@@ -115,17 +124,17 @@ class CFR_agent:
             for i, action in enumerate(actions):
                 
                 #calculate sig(I,a):
-                R_I_a = self.infostate_map[infostate].regret_sum[i]
+                R_I_a = self.infostate_map[infostate].regret_sum.get(action,0)
 
                 R_plus_I_a = max(R_I_a, 0)
 
-                self.infostate_map[infostate].strategy[i] = R_plus_I_a / regret_sum_sum
+                self.infostate_map[infostate].strategy[action] = R_plus_I_a / regret_sum_sum
 
         else:
 
             for i, action in enumerate(actions):
 
-                self.infostate_map[infostate].strategy[i] = 1 / len(actions)
+                self.infostate_map[infostate].strategy[action] = 1 / len(actions)
 
         #calculate node value: essentially current expected value with current strategy
         #v_sig_I
@@ -133,7 +142,7 @@ class CFR_agent:
 
         for i, action in enumerate(actions):
             
-            strategy_a = self.infostate_map[infostate].strategy[i]
+            strategy_a = self.infostate_map[infostate].strategy.get(action, 0)
 
             # We always swap the probabilities because the turn always changes in Kuhn Poker
             # Arg 1 (Next Self) = Current Opponent (pi_i_c)
@@ -141,23 +150,23 @@ class CFR_agent:
             
             value_a = -self.CFR(history + action, pi_i_c, pi_i * strategy_a)
 
-            self.infostate_map[infostate].value[i] = value_a
+            self.infostate_map[infostate].value[action] = value_a
             node_expected_value += strategy_a * value_a
 
         #now reassign the regrets
         for i, action in enumerate(actions):
 
             #compare v(I,a) against v_sig_i
-            value_a = self.infostate_map[infostate].value[i]
-            strategy_a = self.infostate_map[infostate].strategy[i]
+            value_a = self.infostate_map[infostate].get(action, 0)
+            strategy_a = self.infostate_map[infostate].strategy.get(action,0)
 
             #r(I,a) = v(I,a) - v_sig_i
             instantaneous_regret_a = value_a - node_expected_value
-            self.infostate_map[infostate].regret_sum[i] += pi_i_c * instantaneous_regret_a
+            self.infostate_map[infostate].regret_sum[action] = self.infostate_map[infostate].regret_sum.get(action,0) +  pi_c * pi_i_c * instantaneous_regret_a
 
             #update strategy sum
             #sig(a) = sig(a) + (pi_i * sig(a))
-            self.infostate_map[infostate].strategy_sum[i] += strategy_a * pi_i
+            self.infostate_map[infostate].strategy_sum[action] = self.infostate_map[infostate].strategy_sum.get(action,0) + strategy_a * pi_i
 
         return node_expected_value
 
@@ -172,30 +181,30 @@ class CFR_agent:
 
             for i, action in enumerate(actions):
 
-                final_strategy_sum += self.infostate_map[infostate].strategy_sum[i] 
+                final_strategy_sum += self.infostate_map[infostate].strategy_sum.get(action, 0)
 
             if final_strategy_sum > 0:
 
                 for i, action in enumerate(actions):
 
-                    strategy_sum_a = self.infostate_map[infostate].strategy_sum[i] 
+                    strategy_sum_a = self.infostate_map[infostate].strategy_sum.get(action,0)
 
-                    self.infostate_map[infostate].final_strategy[i] = strategy_sum_a / final_strategy_sum
+                    self.infostate_map[infostate].final_strategy[action] = strategy_sum_a / final_strategy_sum
             
             else:
 
                 for i, action in enumerate(actions):
 
-                    self.infostate_map[infostate].final_strategy[i] = 1 / len(actions)
+                    self.infostate_map[infostate].final_strategy[action] = 1 / len(actions)
 
     #Recursive function to calculate expected utility
     def expected_utility(self, history, pi_i, pi_i_c):  
         
-        player = self.game.getPlayerToAct(history=history)
+        player = self.game.player_to_act(history=history)
 
-        if self.game.game_finished(history):
+        if self.game.terminal(history):
 
-            payout = self.game.getPayouts(history, self.cards)
+            payout = self.game.payout(history, self.cards)
 
             if player == 0:
 
