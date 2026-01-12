@@ -124,35 +124,89 @@ class leduc():
             return 0
         
         round_1, separator, round_2 = history.partition(':')
+         
+        chips_committed = [0,0]
+        # Round 1 chips committed
 
         payout = 0
 
-        # Calulate payout from round_1:
-            
+        # Histories (given player 1 wins):
+        # Round 1 / 2:
+        # pp - 1
+        # prf 
+        # prc
+        # prrf
+        # prrc
+        # rf
+        # rc
+        # rrf
+        # rrc
         
-        player = self.player_to_act(history=history)
+        r1_raises = 0
 
-        # Fold cases
-        if 'f' in history:
-            
-            if player == 0:
 
-                return payout
-            
-            else:
+        for i in range(len(round_1)):
+            player = ~(round_1 % 2)
+            if round_1[i] == 'c':
+                if r1_raises == 1:
+                    chips_committed[player] = 1
+                else:
+                    chips_committed[player] = 2
+                break
+            elif round_1[i] == 'r':
+                if r1_raises == 1:
+                    chips_committed[player] = 2
+                else:
+                    chips_committed[player] = 1
+                r1_raises += 1
+            elif round_1[i] == 'f':
+                if player == 0:
+                    return -chips_committed[player]
+                else:
+                    return chips_committed[player]
 
-                return -payout
+        r2_raises = 0
+
+        for i in range(len(round_2)):
+            player = ~(round_1 % 2)
+            if round_1[i] == 'c':
+                if r2_raises == 1:
+                    chips_committed[player] += 2
+                else:
+                    chips_committed[player] += 4
+                break
+            elif round_1[i] == 'r':
+                if r2_raises == 1:
+                    chips_committed[player] += 4
+                else:
+                    chips_committed[player] += 2
+                r1_raises += 1
+            elif round_1[i] == 'f':
+                if player == 0:
+                    return -chips_committed[player]
+                else:
+                    return chips_committed[player]
         
-        # Showdown cases
+        #showdown cases:
+        p1_card = cards[0]
+        p2_card = cards[1]
+        community_card = cards[2]
 
-        
+        if p1_card == community_card:
             
+            return chips_committed[1]
+        
+        if p2_card == community_card:
 
+            return -chips_committed[0]
+        
+        if p1_card > p2_card:
 
+            return chips_committed[1]
+        
+        if p2_card > p1_card:
 
-
-
-
+            return -chips_committed[0]
         
 
-
+        
